@@ -1,50 +1,55 @@
-from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram import Update, InputFile
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 
 TOKEN = '7755895733:AAGqzDhti3hx8sTl93T0QrUmyZsfE3TY42I'
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     username = update.effective_user.username
     if username:
         username = '@' + username
     else:
         username = ''
-    update.message.reply_text(
+    await update.message.reply_text(
         f"سلام!\nخوش آمدی {username}\n"
         "برای ساخت استیکر، عکس بفرست.\n"
         "برای دیدن عکس یا ویدیوی استیکر، استیکر بفرست."
     )
 
-def handle_photo(update: Update, context: CallbackContext):
-    file = update.message.photo[-1].get_file()
-    file.download('photo.jpg')
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = await update.message.photo[-1].get_file()
+    await file.download_to_drive('photo.jpg')
     with open('photo.jpg', 'rb') as f:
-        update.message.reply_sticker(f)
+        await update.message.reply_sticker(InputFile(f))
 
-def handle_sticker(update: Update, context: CallbackContext):
+async def handle_sticker(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sticker = update.message.sticker
-    if sticker.is_animated or sticker.is_video:
-        file = context.bot.get_file(sticker.file_id)
-        filename = 'sticker.tgs' if sticker.is_animated else 'sticker.webm'
-        file.download(filename)
-        with open(filename, 'rb') as f:
-            update.message.reply_document(f, filename=filename)
+    file = await context.bot.get_file(sticker.file_id)
+
+    if sticker.is_animated:
+        filename = 'sticker.tgs'
+    elif sticker.is_video:
+        filename = 'sticker.webm'
     else:
-        file = context.bot.get_file(sticker.file_id)
-        file.download('sticker.webp')
-        with open('sticker.webp', 'rb') as f:
-            update.message.reply_photo(f)
+        filename = 'sticker.webp'
 
-def main():
-    updater = Updater(TOKEN, use_context=True)
-    dp = updater.dispatcher
+    await file.download_to_drive(filename)
 
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(MessageHandler(Filters.photo, handle_photo))
-    dp.add_handler(MessageHandler(Filters.sticker, handle_sticker))
+    with open(filename, 'rb') as f:
+        if sticker.is_animated or sticker.is_video:
+            await update.message.reply_document(InputFile(f, filename=filename))
+        else:
+            await update.message.reply_photo(InputFile(f))
 
-    updater.start_polling()
-    updater.idle()
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.STICKER, handle_sticker))
+
+    print("ربات روشن شد!")
+    await app.run_polling()
 
 if __name__ == '__main__':
-    main()
+    import asyncio
+    asyncio.run(main())
